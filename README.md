@@ -75,6 +75,7 @@ traffic doesn't flood the page.
    while launching the Korvet container. IN case of local environment, deploy the Redis container first,
    followed by Korvet container.
    `sudo docker run -d  -p 6379:6379 redis:latest`
+   
    `sudo docker run -d -p 9092:9092 -p 8080:8080   -e KORVET_REDIS_URI=redis://LocalIP:6379   redisfield/korvet `
    ```
    Specify local ip since specifying `redis://localhost:6379`, will result in Korvet container looking for redis within the self docker container. 
