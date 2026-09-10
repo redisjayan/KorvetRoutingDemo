@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kafka routing - live demo</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#091A23; --surface:#0D2733; --surface-2:#163341; --hover:#2D4754;
+    --border:#163341; --text:#F3F3F3; --muted:#8A99A0; --muted-2:#5C707A;
+    --accent:#FF4438; --lily:#DCFF1E; --sky:#33C2FB; --violet:#C795E3;
+  }
+  *{box-sizing:border-box; margin:0}
+  body{background:var(--bg); color:var(--text); font-family:'Space Grotesk',sans-serif; padding:28px 32px 40px}
+  .mono{font-family:'Space Mono',monospace}
+  header{display:flex; align-items:baseline; gap:14px; margin-bottom:6px}
+  header h1{font-size:22px; font-weight:700}
+  .wordmark{color:var(--accent); font-weight:700; font-size:20px; letter-spacing:-0.5px}
+  .sub{color:var(--muted); font-size:13px; margin-bottom:20px}
+  .dot{display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--muted-2); margin-right:6px; vertical-align:1px}
+  .dot.ok{background:var(--lily)} .dot.bad{background:var(--accent)}
+  .controls{display:flex; gap:10px; align-items:center; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 16px; margin-bottom:18px; flex-wrap:wrap}
+  .btn{font-family:'Space Grotesk',sans-serif; font-weight:500; font-size:13.5px; padding:9px 16px; border-radius:6px; cursor:pointer; border:1px solid var(--hover); background:transparent; color:var(--text)}
+  .btn:hover{background:var(--hover)}
+  .btn.primary{background:var(--accent); border-color:var(--accent); color:#fff}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .counters{margin-left:auto; font-size:12px; color:var(--muted)}
+  .counters b{color:var(--text); font-weight:500}
+  .lane{display:grid; grid-template-columns:170px 1fr 34px 250px; gap:12px; align-items:stretch; margin-bottom:10px}
+  .lane-label{background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px 12px}
+  .lane-label .p{font-family:'Space Mono',monospace; font-size:11px; color:var(--sky)}
+  .lane-label .w{font-size:14px; font-weight:500; margin-top:2px}
+  .lane.priority .lane-label{border-color:var(--accent)}
+  .lane.priority .lane-label .p{color:var(--accent)}
+  .chips{background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:8px 10px; display:flex; gap:6px; align-items:center; flex-wrap:wrap; min-height:52px}
+  .chip{font-family:'Space Mono',monospace; font-size:11px; background:var(--surface-2); border:1px solid var(--hover); color:var(--text); border-radius:999px; padding:3px 9px; animation:pop .18s ease-out}
+  .chip.prio{border-color:var(--accent); color:#FFB0AA}
+  @keyframes pop{from{transform:scale(.7); opacity:0} to{transform:scale(1); opacity:1}}
+  .arrow{display:flex; align-items:center; justify-content:center; color:var(--muted-2); font-size:18px}
+  .consumer{background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:10px 12px; display:flex; flex-direction:column; gap:2px}
+  .consumer .name{font-size:14px; font-weight:500}
+  .consumer .count{font-family:'Space Mono',monospace; font-size:12px; color:var(--lily)}
+  .consumer .last{font-family:'Space Mono',monospace; font-size:10.5px; color:var(--muted-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .lane.priority .consumer{border-color:var(--accent)}
+  .check{margin:16px 0 14px; padding:11px 16px; border-radius:8px; font-size:13px; background:var(--surface); border:1px solid var(--border)}
+  .check b{color:var(--lily); font-weight:500}
+  .check.bad{border-color:var(--accent)} .check.bad b{color:var(--accent)}
+  .logwrap{background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:12px 16px}
+  .logwrap h2{font-size:12px; color:var(--muted); font-weight:400; font-family:'Space Mono',monospace; margin-bottom:8px}
+  #log{font-family:'Space Mono',monospace; font-size:11.5px; line-height:1.8; max-height:220px; overflow-y:auto; color:var(--muted)}
+  #log .t{color:var(--muted-2)} #log .prod{color:var(--sky)} #log .cons{color:var(--text)}
+  #log .pr{color:var(--accent)} #log .ok{color:var(--lily)}
+  footer{margin-top:18px; font-size:11px; color:var(--muted-2)}
+</style>
+</head>
+<body>
+  <header>
+    <span class="wordmark">redis</span>
+    <h1>Kafka routing &middot; live demo</h1>
+    <span class="sub"><span id="conn" class="dot"></span><span id="connText">connecting&hellip;</span></span>
+  </header>
+  <div class="sub">Orders are routed by content at the producer: priority &rarr; the reserved lane, otherwise &rarr; the destination warehouse's partition. Each consumer is pinned to one lane with <span class="mono">assign()</span>.</div>
+
+  <div class="controls">
+    <button class="btn" onclick="submitOrder(false,1)">Submit order</button>
+    <button class="btn primary" onclick="submitOrder(true,1)">Submit priority order</button>
+    <button class="btn" id="burstBtn" onclick="submitOrder(null,burstSize)">Burst</button>
+    <span class="counters">produced <b id="cProd">0</b> &nbsp;&middot;&nbsp; consumed <b id="cCons">0</b></span>
+  </div>
+
+  <div id="lanes"></div>
+
+  <div class="check" id="check"><b>Routing check: PASS</b>
+    <span style="color:var(--muted)"> &mdash; every priority order was handled by the priority application only.</span>
+  </div>
+
+  <div class="logwrap">
+    <h2>EVENT LOG</h2>
+    <div id="log"></div>
+  </div>
+  <footer>(c) 2026 Redis Ltd. All rights reserved. &nbsp;&middot;&nbsp; topic <span class="mono" id="topicName"></span></footer>
+
+<script>
+let burstSize = 10, produced = 0, consumed = 0, violations = 0;
+const consumers = {};   // label -> {countEl,lastEl}
+const laneChips = {};   // label -> chips container
+
+function laneRow(partition, label, isPriority){
+  const row = document.createElement('div');
+  row.className = 'lane' + (isPriority ? ' priority' : '');
+  row.innerHTML =
+    `<div class="lane-label"><div class="p">PARTITION ${partition}</div><div class="w">${isPriority ? 'priority orders' : label}</div></div>` +
+    `<div class="chips" id="chips-${label}"></div>` +
+    `<div class="arrow">&rarr;</div>` +
+    `<div class="consumer"><div class="name">${isPriority ? 'Priority agents' : label + ' fulfilment'}</div>` +
+    `<div class="count" id="count-${label}">0 fulfilled</div><div class="last" id="last-${label}">&nbsp;</div></div>`;
+  return row;
+}
+
+function buildLanes(cfg){
+  burstSize = cfg.burst_size || 10;
+  document.getElementById('burstBtn').textContent = 'Burst ×' + burstSize;
+  document.getElementById('topicName').textContent = cfg.topic;
+  const holder = document.getElementById('lanes');
+  if (holder.childElementCount) return;
+  for (const wh of cfg.warehouses)
+    holder.appendChild(laneRow(cfg.warehouse_partitions[wh], wh, false));
+  holder.appendChild(laneRow(cfg.priority_partition, 'PRIORITY', true));
+  for (const label of [...cfg.warehouses, 'PRIORITY']){
+    laneChips[label] = document.getElementById('chips-' + label);
+    consumers[label] = {countEl: document.getElementById('count-' + label),
+                        lastEl: document.getElementById('last-' + label), n: 0};
+  }
+}
+
+function logLine(html){
+  const log = document.getElementById('log');
+  const time = new Date().toLocaleTimeString('en-GB');
+  log.insertAdjacentHTML('afterbegin', `<div><span class="t">${time}</span>  ${html}</div>`);
+  while (log.childElementCount > 200) log.lastChild.remove();
+}
+
+function onProduced(ev){
+  produced++; document.getElementById('cProd').textContent = produced;
+  const o = ev.order;
+  const chips = laneChips[ev.target];
+  if (chips){
+    const chip = document.createElement('span');
+    chip.className = 'chip' + (o.priority ? ' prio' : '');
+    chip.dataset.id = o.order_id;
+    chip.textContent = o.order_id;
+    chips.appendChild(chip);
+    while (chips.childElementCount > 24) chips.firstChild.remove();
+  }
+  logLine(`<span class="prod">produced</span> ${o.order_id} &rarr; ${ev.target} (partition ${ev.partition}) ${o.item} x${o.qty}${o.priority ? ' <span class="pr">PRIORITY</span>' : ''}`);
+}
+
+function onConsumed(ev){
+  consumed++; document.getElementById('cCons').textContent = consumed;
+  const o = ev.order, c = consumers[ev.consumer];
+  const chips = laneChips[ev.consumer];
+  if (chips){
+    const chip = chips.querySelector(`[data-id="${o.order_id}"]`);
+    if (chip) chip.remove();
+  }
+  if (c){
+    c.n++;
+    c.countEl.textContent = c.n + ' fulfilled';
+    c.lastEl.textContent = `${o.order_id} · ${o.item} x${o.qty}` + (ev.consumer === 'PRIORITY' ? ` for ${o.warehouse}` : '');
+  }
+  const bad = ev.priority && ev.consumer !== 'PRIORITY';
+  if (bad){
+    violations++;
+    const check = document.getElementById('check');
+    check.className = 'check bad';
+    check.innerHTML = `<b>Routing check: FAIL</b> <span style="color:var(--muted)"> &mdash; ${violations} priority order(s) seen outside the priority lane.</span>`;
+  }
+  logLine(`<span class="cons">consumed</span> ${o.order_id} by ${ev.consumer}${ev.priority ? (bad ? ' <span class="pr">VIOLATION</span>' : ' <span class="ok">expedited</span>') : ''}`);
+}
+
+let token = sessionStorage.getItem('demo-token') || '';
+async function submitOrder(priority, count, retried){
+  const headers = {'Content-Type':'application/json'};
+  if (token) headers['X-Demo-Token'] = token;
+  let r;
+  try {
+    r = await fetch('/api/order', {method:'POST', headers,
+                    body: JSON.stringify({priority: priority, count: count})});
+  } catch (e) {
+    logLine('<span class="pr">submit failed - is the server running?</span>');
+    return;
+  }
+  if (r.status === 401 && !retried){
+    const t = prompt('This demo needs an access token to submit orders:');
+    if (t){ token = t; sessionStorage.setItem('demo-token', t); return submitOrder(priority, count, true); }
+  }
+  if (r.status === 401) logLine('<span class="pr">submission blocked - invalid access token</span>');
+}
+
+const es = new EventSource('/events');
+es.onopen = () => { document.getElementById('conn').className = 'dot ok';
+                    document.getElementById('connText').textContent = 'live'; };
+es.onerror = () => { document.getElementById('conn').className = 'dot bad';
+                     document.getElementById('connText').textContent = 'reconnecting…'; };
+es.onmessage = (m) => {
+  const ev = JSON.parse(m.data);
+  if (ev.type === 'hello') buildLanes(ev);
+  else if (ev.type === 'produced') onProduced(ev);
+  else if (ev.type === 'consumed') onConsumed(ev);
+};
+</script>
+</body>
+</html>
