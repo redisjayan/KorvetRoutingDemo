@@ -57,21 +57,6 @@ only ever be consumed by the priority application). Host/port in `config.py`.
 The web consumers use their own groups starting at `latest`, so old CLI-demo
 traffic doesn't flood the page.
 
-### Exposing it on the internet
-
-1. In `config.py`, set `WEB_ACCESS_TOKEN` to a secret string (required — the
-   submit endpoint returns 401 without it; the UI prompts for the token once).
-   `WEB_HOST` already binds all interfaces (`0.0.0.0`).
-2. Start the app: `python webapp.py`
-3. Publish port 8000 with any of:
-   - `cloudflared tunnel --url http://localhost:8000` — free quick tunnel, no
-     account, prints a public `https://...trycloudflare.com` URL
-   - `ngrok http 8000`
-   - a router port-forward / cloud VM security-group rule for port 8000
-
-Only the web port is exposed. The Kafka broker stays private — browsers talk
-to `webapp.py`, never to Kafka. The event stream is read-only; the token
-protects the only mutating endpoint (order submission).
 
 ## Notes
 
