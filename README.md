@@ -64,3 +64,18 @@ traffic doesn't flood the page.
   fewer partitions, delete it first (needs ≥ warehouses + 1 partitions).
 - At larger scale you'd typically use a separate `orders.priority` topic
   instead of a partition; the producer-side content-based routing is identical.
+
+## Containers 
+
+1. The Kafka container , use the following Docker command for deploying Kafka container :
+   `sudo docker run -d --name kafka -p 9092:9092 apache/kafka:latest`
+
+2. To run Korvet (Ultra Streams) container:
+   Korvet container depends on Redis Streams, hence needs Redis URL as an input parameter
+   while launching the Korvet container. IN case of local environment, deploy the Redis container first,
+   followed by Korvet container.
+   `sudo docker run -d  -p 6379:6379 redis:latest`
+   `sudo docker run -d -p 9092:9092 -p 8080:8080   -e KORVET_REDIS_URI=redis://LocalIP:6379   redisfield/korvet `
+   ```
+   Specify local ip since specifying `redis://localhost:6379`, will result in Korvet container looking for redis within the self docker container. 
+   ```
